@@ -1,8 +1,7 @@
-use core::f64;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fs;
-use rand::seq::SliceRandom;
+use rand::seq::{IndexedRandom, SliceRandom};
 use rand::rng;
 use rand_distr::{Distribution, Normal};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -31,7 +30,7 @@ type Matrix = Vec<Vec<ValueRef>>;
 struct Value {
     data: f64,
     grad: f64,
-    childern: Vec<ValueRef>,
+    children: Vec<ValueRef>,
     local_grads: Vec<f64>,
 }
 
@@ -40,7 +39,7 @@ impl Value {
         Rc::new(RefCell::new(Value {
             data: data,
             grad: 0.0,
-            childern: Vec::new(),
+            children: Vec::new(),
             local_grads: Vec::new(),
         }))
     }
@@ -64,7 +63,7 @@ impl ValueOps for ValueRef {
         Rc::new(RefCell::new(Value {
             data: self.borrow().data + other.borrow().data,
             grad: 0.0,
-            childern: vec![self.clone(), other.clone()],
+            children: vec![self.clone(), other.clone()],
             local_grads: vec![1.0, 1.0],
         }))
     }
@@ -73,7 +72,7 @@ impl ValueOps for ValueRef {
         Rc::new(RefCell::new(Value {
             data: self.borrow().data * other.borrow().data,
             grad: 0.0,
-            childern: vec![self.clone(), other.clone()],
+            children: vec![self.clone(), other.clone()],
             local_grads: vec![other.borrow().data, self.borrow().data],
         }))
     }
@@ -82,7 +81,7 @@ impl ValueOps for ValueRef {
         Rc::new(RefCell::new(Value {
             data: self.borrow().data.powf(other),
             grad: 0.0,
-            childern: vec![self.clone()],
+            children: vec![self.clone()],
             local_grads: vec![other * self.borrow().data.powf(other - 1.0)],
         }))
     }
@@ -103,7 +102,7 @@ impl ValueOps for ValueRef {
         Rc::new(RefCell::new(Value {
             data: self.borrow().data.ln(),
             grad: 0.0,
-            childern: vec![self.clone()],
+            children: vec![self.clone()],
             local_grads: vec![1.0 / self.borrow().data],
         }))
     }
@@ -112,7 +111,7 @@ impl ValueOps for ValueRef {
         Rc::new(RefCell::new(Value {
             data: self.borrow().data.exp(),
             grad: 0.0,
-            childern: vec![self.clone()],
+            children: vec![self.clone()],
             local_grads: vec![self.borrow().data.exp()]
         }))
     }
@@ -121,7 +120,7 @@ impl ValueOps for ValueRef {
         Rc::new(RefCell::new(Value {
             data: f64::max(0.0, self.borrow().data),
             grad: 0.0,
-            childern: vec![self.clone()],
+            children: vec![self.clone()],
             local_grads: vec![f64::from(self.borrow().data > 0.0)],
         }))
     }
@@ -135,7 +134,7 @@ impl ValueOps for ValueRef {
             let addr = Rc::as_ptr(v);
             if !visited.contains(&addr) {
                 visited.insert(addr);
-                for child in &v.borrow().childern {
+                for child in &v.borrow().children {
                     build_topo(child, visited, topo);
                 }
                 topo.push(v.clone());
@@ -150,7 +149,7 @@ impl ValueOps for ValueRef {
         self.borrow_mut().grad = 1.0;
 
         for v in topo.iter().rev() {
-            for (child, local_grad) in self.borrow().childern.iter().zip(&v.borrow().local_grads) {
+            for (child, local_grad) in v.borrow().children.iter().zip(&v.borrow().local_grads) {
                 child.borrow_mut().grad += local_grad * v.borrow().grad;
             }
         }
@@ -160,7 +159,7 @@ impl ValueOps for ValueRef {
 
 fn matrix(nout: usize, nin: usize) -> Matrix {
     let mut rng = rng();
-    let normal = Normal::new(0.0, 0.8).unwrap();
+    let normal = Normal::new(0.0, 0.08).unwrap();
 
     (0..nout)
         .map(|_| {
@@ -197,7 +196,7 @@ fn softmax(logits: &Vec<ValueRef>) -> Vec<ValueRef> {
 
 fn rmsnorm(x: &Vec<ValueRef>) -> Vec<ValueRef> {
     let ms = sum(x.iter().map(|xi| xi.mul(xi))).truediv(&Value::new(x.len() as f64));
-    let scale = ms.add(&Value::new(1e-5)).pow(0.5);
+    let scale = ms.add(&Value::new(1e-5)).pow(-0.5);
     x.iter().map(|xi| xi.mul(&scale)).collect()
 }
 
@@ -245,7 +244,7 @@ fn gpt(
                 .collect();
             x_attn.extend(head_out);
         }
-        x = linear(&x, &state_dict[&format!("layer{li}.attn_wo")]);
+        x = linear(&x_attn, &state_dict[&format!("layer{li}.attn_wo")]);
         x = x
             .iter()
             .zip(x_residual)
@@ -280,10 +279,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let uchars: BTreeSet<char> = BTreeSet::from_iter(dataset.iter().flat_map(|s| s.chars()));
     let uchars: Vec<&char> = uchars.iter().collect();
     
-    let BOS = uchars.len();
+    let bos = uchars.len();
     let vocab_size = uchars.len() + 1;
 
-    println!(" dataset_size: {}", dataset.len());
+    println!("dataset_size: {}", dataset.len());
     println!("vocab_size: {}", vocab_size);
 
     // set up model parameters, optimizer, and training loop
@@ -320,13 +319,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let data: &str = dataset[step % dataset.len()];
 
-        let mut tokens = vec![BOS];
+        let mut tokens = vec![bos];
         tokens.extend(
             data.chars()
                 .map(|ch| uchars.iter().position(|&&c| c == ch).unwrap()),
         );
 
-        tokens.push(BOS);
+        tokens.push(bos);
         let n = usize::min(block_size, tokens.len() - 1);
         
         let (mut keys, mut values): (Vec<Matrix>, Vec<Matrix>) = (vec![Vec::new(); n_layer], vec![Vec::new(); n_layer]);
@@ -354,8 +353,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         for (i, p) in params.iter().enumerate() {
             m[i] = beta1 * m[i] + (1.0 - beta1) * p.borrow().grad;
             v[i] = beta2 * v[i] + (1.0 - beta2) * p.borrow().grad.powi(2);
-            let m_hat = m[i] / (1.0 - beta1.powi(step as i32));
-            let v_hat = v[i] / (1.0 - beta2.powi(step as i32));
+            let m_hat = m[i] / (1.0 - beta1.powi(step as i32 + 1));
+            let v_hat = v[i] / (1.0 - beta2.powi(step as i32 + 1));
             p.borrow_mut().data -= lr_t * m_hat / (v_hat.powf(0.5) + eps_adam);
             p.borrow_mut().grad = 0.0;
         }
@@ -365,8 +364,45 @@ fn main() -> Result<(), Box<dyn Error>> {
             step + 1,
             num_steps,
             loss.borrow().data
-        )
+        );
+    }
+
+    // The inference loop
+    let temperature = 0.5;
+    println!("\n --- inference (new hallucinated names) ---");
+    for sample_idx in 0..20 {
+        let (mut keys, mut vlaues) = (vec![Vec::new(); n_layer], vec![Vec::new(); n_layer]);
+        let mut token_id = bos;
+        let mut sample = Vec::new();
+        
+        for pos_id in 0..block_size {
+            let logits = gpt(
+                token_id,
+                pos_id,
+                n_layer,
+                n_head,
+                head_dim,
+                &mut keys,
+                &mut vlaues,
+                &state_dict,
+            );
+            let probs: Vec<ValueRef> = softmax(
+                &logits
+                    .iter()
+                    .map(|l| l.truediv(&Value::new(temperature)))
+                    .collect(),
+            );
+            token_id = *(0..vocab_size)
+                .collect::<Vec<usize>>()
+                .choose_weighted(&mut rng, |&i| probs[i].borrow().data)?;
+            if token_id == bos {
+                break;
+            }
+            sample.push(uchars[token_id]);
+        }
+        print!("sample {:2}: {}\n", sample_idx + 1, String::from_iter(sample));
 
     }
+
     Ok(())
 }

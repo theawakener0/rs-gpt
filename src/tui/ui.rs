@@ -7,24 +7,52 @@ use ratatui::{
     Frame,
 };
 
+// ── Rust Forge palette — full monochrome, tonal depth (all forge) ──
+const FORGE_CHAR: Color = Color::Rgb(18, 16, 18);   // deepest void behind anvil
+const SMITHY: Color = Color::Rgb(43, 30, 22);       // surface / pad / card
+const ANVIL: Color = Color::Rgb(59, 46, 42);        // warm panel bg (mdBook sidebar)
+const KILN: Color = Color::Rgb(80, 44, 30);         // border mid
+const HARD_RUST: Color = Color::Rgb(115, 64, 43);   // deep rust border highlight
+const RUST_ORANGE: Color = Color::Rgb(206, 66, 43); // #CE422B canonical Ferris/Cargo
+const EMBER: Color = Color::Rgb(232, 94, 37);       // hot ember glow (peak)
+const SAND: Color = Color::Rgb(222, 165, 132);      // DEA584 sand highlight
+const ASH: Color = Color::Rgb(255, 231, 194);       // hot cream peak t=1.0
+const CREAM: Color = Color::Rgb(235, 219, 178);     // body text warm white
+const STONE: Color = Color::Rgb(103, 115, 122);     // muted labels
+
 fn interpolate_color(t: f64) -> Color {
     let t = t.clamp(0.0, 1.0);
-    // blue (low) -> red (high) via purple
-    // simple lerp: low=blue, high=red
-    let r = (t * 255.0) as u8;
-    let b = ((1.0 - t) * 255.0) as u8;
-    let g = (20.0 + t * 40.0 * (1.0 - t) * 4.0) as u8; // slight purple mid
-    Color::Rgb(r, g, b)
+    // 5-stop forge: char(18,16,18) → hard_rust(115,64,43) → crate(206,66,43) → sand(222,165,132) → ash(255,231,194)
+    let (r, g, b) = if t < 0.3 {
+        let k = t / 0.3;
+        (18.0 + k * 97.0, 16.0 + k * 48.0, 18.0 + k * 25.0)
+    } else if t < 0.6 {
+        let k = (t - 0.3) / 0.3;
+        (115.0 + k * 91.0, 64.0 + k * 2.0, 43.0 + k * 0.0)
+    } else if t < 0.85 {
+        let k = (t - 0.6) / 0.25;
+        (206.0 + k * 16.0, 66.0 + k * 99.0, 43.0 + k * 89.0)
+    } else {
+        let k = (t - 0.85) / 0.15;
+        (222.0 + k * 33.0, 165.0 + k * 66.0, 132.0 + k * 62.0)
+    };
+    Color::Rgb(r as u8, g as u8, b as u8)
 }
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
     if area.width < 60 || area.height < 20 {
         let msg = Paragraph::new("Terminal too small — resize to at least 80x24 (q / Ctrl-C to quit)")
-            .block(Block::default().borders(Borders::ALL).title(" rs-gpt "))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(HARD_RUST))
+                    .title(Span::styled(" rs-gpt ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)))
+                    .style(Style::default().bg(FORGE_CHAR).fg(CREAM)),
+            )
+            .style(Style::default().fg(STONE))
             .wrap(Wrap { trim: true });
         frame.render_widget(msg, area);
-        // still show footer hint even when small
         return;
     }
 
@@ -78,12 +106,18 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
     );
 
     let gauge = Gauge::default()
-        .block(Block::default().borders(Borders::ALL).title(title))
-        .gauge_style(Style::default().fg(Color::Cyan).bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(KILN))
+                .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)))
+                .style(Style::default().bg(ANVIL)),
+        )
+        .gauge_style(Style::default().fg(RUST_ORANGE).bg(SMITHY).add_modifier(Modifier::BOLD))
         .percent(pct)
         .label(Span::styled(
             format!("{pct}%"),
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default().fg(ASH).add_modifier(Modifier::BOLD),
         ));
     frame.render_widget(gauge, area);
 }
@@ -114,7 +148,7 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
                 .name("loss")
                 .marker(ratatui::symbols::Marker::Braille)
                 .graph_type(GraphType::Line)
-                .style(Style::default().fg(Color::Cyan))
+                .style(Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD))
                 .data(&loss_data),
         ]
     };
@@ -123,29 +157,33 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(" Loss  ({} points) ", loss_data.len()))
-                .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                .border_style(Style::default().fg(KILN))
+                .title(Span::styled(
+                    format!(" Loss  ({} points) ", loss_data.len()),
+                    Style::default().fg(SAND).add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(ANVIL)),
         )
         .x_axis(
             ratatui::widgets::Axis::default()
-                .title("step")
-                .style(Style::default().fg(Color::Gray))
+                .title(Span::styled("step", Style::default().fg(STONE)))
+                .style(Style::default().fg(STONE))
                 .bounds([0.0, max_x])
                 .labels(vec![
-                    Span::raw("0"),
-                    Span::raw(format!("{}", app.num_steps / 2)),
-                    Span::raw(format!("{}", app.num_steps)),
+                    Span::styled("0", Style::default().fg(STONE)),
+                    Span::styled(format!("{}", app.num_steps / 2), Style::default().fg(STONE)),
+                    Span::styled(format!("{}", app.num_steps), Style::default().fg(STONE)),
                 ]),
         )
         .y_axis(
             ratatui::widgets::Axis::default()
-                .title("loss")
-                .style(Style::default().fg(Color::Gray))
+                .title(Span::styled("loss", Style::default().fg(STONE)))
+                .style(Style::default().fg(STONE))
                 .bounds([y_min, y_max])
                 .labels(vec![
-                    Span::raw(format!("{:.1}", y_min)),
-                    Span::raw(format!("{:.1}", (y_min + y_max) / 2.0)),
-                    Span::raw(format!("{:.1}", y_max)),
+                    Span::styled(format!("{:.1}", y_min), Style::default().fg(STONE)),
+                    Span::styled(format!("{:.1}", (y_min + y_max) / 2.0), Style::default().fg(STONE)),
+                    Span::styled(format!("{:.1}", y_max), Style::default().fg(STONE)),
                 ]),
         );
     frame.render_widget(chart, cols[0]);
@@ -177,12 +215,16 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(" Grad |g| (last {} ) ", if window_len == 0 { 0 } else { window_len }))
-                .title_style(Style::default().fg(Color::Magenta)),
+                .border_style(Style::default().fg(KILN))
+                .title(Span::styled(
+                    format!(" Grad · forge (last {} ) ", if window_len == 0 { 0 } else { window_len }),
+                    Style::default().fg(SAND).add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(ANVIL)),
         )
         .data(&spark_data)
         .max(8)
-        .style(Style::default().fg(Color::Magenta));
+        .style(Style::default().fg(EMBER));
     frame.render_widget(sparkline, right[0]);
 
     // Stats block
@@ -195,26 +237,32 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
     };
     let stats_text = vec![
         Line::from(vec![
-            Span::styled("current: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(last_loss, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled("current: ", Style::default().fg(STONE)),
+            Span::styled(last_loss, Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)),
         ]),
         Line::from(vec![
-            Span::styled("best:    ", Style::default().fg(Color::DarkGray)),
-            Span::styled(best_loss, Style::default().fg(Color::Green)),
+            Span::styled("best:    ", Style::default().fg(STONE)),
+            Span::styled(best_loss, Style::default().fg(ASH).add_modifier(Modifier::ITALIC)),
         ]),
         Line::from(vec![
-            Span::styled("phase:   ", Style::default().fg(Color::DarkGray)),
+            Span::styled("phase:   ", Style::default().fg(STONE)),
             Span::styled(
                 format!("{:?}", app.phase),
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(SAND).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(Span::styled(
             "q quit │ ←→ layer │ ↑↓ head",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(STONE).add_modifier(Modifier::ITALIC),
         )),
     ];
-    let stats = Paragraph::new(stats_text).block(Block::default().borders(Borders::ALL).title(" Stats "));
+    let stats = Paragraph::new(stats_text).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(KILN))
+            .title(Span::styled(" Stats ", Style::default().fg(SAND).add_modifier(Modifier::BOLD)))
+            .style(Style::default().bg(ANVIL)),
+    );
     frame.render_widget(stats, right[1]);
 }
 
@@ -232,13 +280,17 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
         " Attention Heatmap  (warming up — no snapshot yet) ".to_string()
     };
 
-    let block = Block::default().borders(Borders::ALL).title(title);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(KILN))
+        .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)))
+        .style(Style::default().bg(ANVIL));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     if !has_attn {
         let p = Paragraph::new("Training… attention weights will appear after first step")
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(STONE).add_modifier(Modifier::ITALIC))
             .wrap(Wrap { trim: true });
         frame.render_widget(p, inner);
         return;
@@ -247,19 +299,19 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
     let attn = app.attn.as_ref().unwrap();
     // attn shape: [layer][head][query][key]
     if app.selected_layer >= attn.len() {
-        let p = Paragraph::new("No attention for selected layer").style(Style::default().fg(Color::Red));
+        let p = Paragraph::new("No attention for selected layer").style(Style::default().fg(EMBER));
         frame.render_widget(p, inner);
         return;
     }
     let layer = &attn[app.selected_layer];
     if app.selected_head >= layer.len() {
-        let p = Paragraph::new("No attention for selected head").style(Style::default().fg(Color::Red));
+        let p = Paragraph::new("No attention for selected head").style(Style::default().fg(EMBER));
         frame.render_widget(p, inner);
         return;
     }
     let head = &layer[app.selected_head];
     if head.is_empty() {
-        let p = Paragraph::new("Empty attention matrix").style(Style::default().fg(Color::DarkGray));
+        let p = Paragraph::new("Empty attention matrix").style(Style::default().fg(STONE));
         frame.render_widget(p, inner);
         return;
     }
@@ -277,9 +329,9 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
         .collect();
 
     // Header: empty corner + key indices (0..block_size constant)
-    let header_cells: Vec<Cell> = std::iter::once(Cell::from("").style(Style::default().fg(Color::DarkGray)))
+    let header_cells: Vec<Cell> = std::iter::once(Cell::from("").style(Style::default().fg(STONE)))
         .chain((0..n_key).map(|k| {
-            Cell::from(format!("{k}")).style(Style::default().fg(Color::DarkGray))
+            Cell::from(format!("{k}")).style(Style::default().fg(STONE))
         }))
         .collect();
     let header = Row::new(header_cells).height(1);
@@ -287,26 +339,28 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
     for qi in 0..n_query {
         let row_weights = head.get(qi);
         let mut cells: Vec<Cell> = Vec::with_capacity(n_key + 1);
-        cells.push(Cell::from(format!("{qi}")).style(Style::default().fg(Color::Gray)));
+        cells.push(Cell::from(format!("{qi}")).style(Style::default().fg(STONE)));
         for ki in 0..n_key {
             let w = row_weights.and_then(|r| r.get(ki).copied()).unwrap_or(0.0);
             let beyond_data = row_weights.is_none() || ki >= row_weights.unwrap().len();
             let is_future = ki > qi;
             let is_pad = beyond_data;
             let bg = if is_pad || is_future {
-                Color::Rgb(20, 20, 20)
+                SMITHY
             } else {
                 interpolate_color(w)
             };
-            let cell = Cell::from("  ").style(Style::default().bg(bg).fg(Color::White));
+            // high heat gets ASH fg for contrast on ember
+            let fg = if !is_pad && !is_future && w > 0.6 { ASH } else { CREAM };
+            let cell = Cell::from("  ").style(Style::default().bg(bg).fg(fg));
             cells.push(cell);
         }
         rows.push(Row::new(cells).height(1));
     }
 
     let table = Table::new(rows, constraints)
-        .header(header.style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)).height(1))
-        .block(Block::default())
+        .header(header.style(Style::default().fg(SAND).add_modifier(Modifier::BOLD)).height(1))
+        .block(Block::default().style(Style::default().bg(ANVIL)))
         .column_spacing(0);
 
     frame.render_widget(table, inner);
@@ -321,37 +375,38 @@ fn draw_inference(frame: &mut Frame, app: &mut App, area: Rect) {
     );
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(title)
-        .title_style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD));
+        .border_style(Style::default().fg(KILN))
+        .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)))
+        .style(Style::default().bg(ANVIL));
 
     let mut lines: Vec<Line> = Vec::new();
     for (i, s) in app.inference_samples.iter().enumerate() {
         lines.push(Line::from(vec![
             Span::styled(
                 format!("sample {:2}: ", i + 1),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(STONE).add_modifier(Modifier::ITALIC),
             ),
-            Span::styled(s.clone(), Style::default().fg(Color::White)),
+            Span::styled(s.clone(), Style::default().fg(CREAM)),
         ]));
     }
     if !app.inference_buf.is_empty() && app.phase == Phase::Sampling {
         lines.push(Line::from(vec![
             Span::styled(
                 format!("sample {:2}: ", app.inference_samples.len() + 1),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(STONE).add_modifier(Modifier::ITALIC),
             ),
-            Span::styled(app.inference_buf.clone(), Style::default().fg(Color::White)),
-            Span::styled("█", Style::default().fg(Color::Green).add_modifier(Modifier::SLOW_BLINK)),
+            Span::styled(app.inference_buf.clone(), Style::default().fg(CREAM)),
+            Span::styled("█", Style::default().fg(EMBER).add_modifier(Modifier::SLOW_BLINK | Modifier::BOLD)),
         ]));
     } else if app.phase == Phase::Done {
         lines.push(Line::from(Span::styled(
             "— done —  (footer: q to quit, ←→/↑↓ inspect attention, ? help)",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(SAND).add_modifier(Modifier::ITALIC),
         )));
     } else if app.inference_samples.is_empty() && app.phase == Phase::Training {
         lines.push(Line::from(Span::styled(
             "Waiting for training to finish…",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(STONE).add_modifier(Modifier::ITALIC),
         )));
     }
 
@@ -391,11 +446,11 @@ fn draw_inference(frame: &mut Frame, app: &mut App, area: Rect) {
 }
 
 fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let key_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-    let desc_style = Style::default().fg(Color::White);
-    let sep = Span::styled(" │ ", Style::default().fg(Color::DarkGray));
+    let key_style = Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD);
+    let desc_style = Style::default().fg(CREAM);
+    let sep = Span::styled(" │ ", Style::default().fg(STONE));
     let quit_style = if app.phase == Phase::Done {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+        Style::default().fg(ASH).add_modifier(Modifier::BOLD)
     } else {
         key_style
     };
@@ -434,7 +489,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     } else {
         Line::from(full)
     };
-    let para = Paragraph::new(line).style(Style::default().bg(Color::Rgb(40, 40, 40)).fg(Color::White));
+    let para = Paragraph::new(line).style(Style::default().bg(ANVIL).fg(CREAM));
     frame.render_widget(para, area);
 }
 
@@ -442,9 +497,12 @@ fn draw_help(frame: &mut Frame, area: Rect) {
     use ratatui::widgets::Clear;
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Help — ?/Esc to close ")
-        .title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
-        .style(Style::default().bg(Color::Black).fg(Color::White));
+        .border_style(Style::default().fg(HARD_RUST))
+        .title(Span::styled(
+            " Help — ?/Esc to close ",
+            Style::default().fg(SAND).add_modifier(Modifier::BOLD),
+        ))
+        .style(Style::default().bg(SMITHY).fg(CREAM));
     // centered popup 60% x 50%
     let popup_area = {
         let v = Layout::default()
@@ -459,18 +517,18 @@ fn draw_help(frame: &mut Frame, area: Rect) {
     };
     frame.render_widget(Clear, popup_area);
     let help_lines = vec![
-        Line::from(Span::styled("Keys", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("Keys", Style::default().fg(EMBER).add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from(vec![Span::styled(" q / Q / Ctrl-C  ", Style::default().fg(Color::Cyan)), Span::raw("quit (any phase)")]),
-        Line::from(vec![Span::styled(" ← / →          ", Style::default().fg(Color::Cyan)), Span::raw("cycle attention layer")]),
-        Line::from(vec![Span::styled(" ↑ / ↓          ", Style::default().fg(Color::Cyan)), Span::raw("cycle attention head")]),
-        Line::from(vec![Span::styled(" j / k          ", Style::default().fg(Color::Cyan)), Span::raw("scroll inference 1 line (auto-follow off)")]),
-        Line::from(vec![Span::styled(" PgUp / PgDn    ", Style::default().fg(Color::Cyan)), Span::raw("scroll page")]),
-        Line::from(vec![Span::styled(" Home / End / G ", Style::default().fg(Color::Cyan)), Span::raw("top / bottom (End re-enables follow)")]),
-        Line::from(vec![Span::styled(" ? / Esc        ", Style::default().fg(Color::Cyan)), Span::raw("toggle / close help")]),
+        Line::from(vec![Span::styled(" q / Q / Ctrl-C  ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("quit (any phase)")]),
+        Line::from(vec![Span::styled(" ← / →          ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("cycle attention layer")]),
+        Line::from(vec![Span::styled(" ↑ / ↓          ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("cycle attention head")]),
+        Line::from(vec![Span::styled(" j / k          ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("scroll inference 1 line (auto-follow off)")]),
+        Line::from(vec![Span::styled(" PgUp / PgDn    ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("scroll page")]),
+        Line::from(vec![Span::styled(" Home / End / G ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("top / bottom (End re-enables follow)")]),
+        Line::from(vec![Span::styled(" ? / Esc        ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("toggle / close help")]),
         Line::from(""),
-        Line::from(Span::styled("Inference auto-follows newest samples; scroll to inspect history.", Style::default().fg(Color::DarkGray))),
-        Line::from(Span::styled("Header shows training progress; heatmap fixed 16×16 (q/ctx to quit).", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("Inference auto-follows newest samples; scroll to inspect history.", Style::default().fg(STONE).add_modifier(Modifier::ITALIC))),
+        Line::from(Span::styled("Header shows training progress; heatmap fixed 16×16 (q/ctx to quit).", Style::default().fg(STONE).add_modifier(Modifier::ITALIC))),
     ];
     let para = Paragraph::new(help_lines)
         .block(block)

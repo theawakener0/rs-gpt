@@ -23,6 +23,7 @@ pub struct Sampler {
 }
 
 impl Sampler {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         n_layer: usize,
         n_head: usize,
@@ -93,7 +94,7 @@ impl Sampler {
             &logits
                 .iter()
                 .map(|l| l.truediv(&Value::new(self.temperature)))
-                .collect(),
+                .collect::<Vec<_>>(),
         );
 
         let token_id = *(0..self.vocab_size)

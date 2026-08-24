@@ -11,9 +11,9 @@ use crate::tui::train::{Dataset, TrainState};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::collections::HashMap;
 use std::error::Error;
 use std::io;
@@ -55,7 +55,12 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         num_steps,
     };
 
-    let mut app = App::new(config, dataset.chars.clone(), dataset.bos, dataset.names.len());
+    let mut app = App::new(
+        config,
+        dataset.chars.clone(),
+        dataset.bos,
+        dataset.names.len(),
+    );
     let mut train_state = TrainState::new(num_params);
 
     // terminal setup
@@ -87,7 +92,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => break,
                     KeyCode::Esc if app.show_help => app.show_help = false,
                     KeyCode::Char('?') => app.show_help = !app.show_help,
-                    KeyCode::Char('/') if !k.modifiers.contains(KeyModifiers::CONTROL) => app.show_help = !app.show_help,
+                    KeyCode::Char('/') if !k.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.show_help = !app.show_help
+                    }
                     KeyCode::Left => app.cycle_layer(-1),
                     KeyCode::Right => app.cycle_layer(1),
                     KeyCode::Up => app.cycle_head(-1),
@@ -183,21 +190,19 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                                 }
                                 app.phase = Phase::Done;
                             }
-                            Some(opt_ch) => {
-                                match opt_ch {
-                                    Some(ch) => {
-                                        app.inference_buf.push(ch);
-                                    }
-                                    None => {
-                                        if !app.inference_buf.is_empty() {
-                                            let completed = app.inference_buf.clone();
-                                            app.inference_samples.push(completed);
-                                            app.inference_buf.clear();
-                                        } else if s.samples_generated > app.inference_samples.len() {
-                                        }
+                            Some(opt_ch) => match opt_ch {
+                                Some(ch) => {
+                                    app.inference_buf.push(ch);
+                                }
+                                None => {
+                                    if !app.inference_buf.is_empty() {
+                                        let completed = app.inference_buf.clone();
+                                        app.inference_samples.push(completed);
+                                        app.inference_buf.clear();
+                                    } else if s.samples_generated > app.inference_samples.len() {
                                     }
                                 }
-                            }
+                            },
                         }
                     }
                 }
@@ -208,12 +213,15 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         }
 
         terminal.draw(|f| ui::draw(f, &mut app))?;
-
     }
 
     // restore
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     terminal.show_cursor()?;
 
     let _ = std::panic::take_hook();

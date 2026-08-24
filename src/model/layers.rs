@@ -1,10 +1,9 @@
 use super::value::*;
 use rand::rng;
 use rand_distr::{Distribution, Normal};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
-
 
 pub type Matrix = Vec<Vec<ValueRef>>;
 
@@ -25,13 +24,13 @@ pub fn sum(x: impl IntoIterator<Item = ValueRef>) -> ValueRef {
     x.into_iter().fold(Value::new(0.0), |acc, x| acc.add(&x))
 }
 
-pub fn linear(x: &Vec<ValueRef>, w: &Matrix) -> Vec<ValueRef> {
-    w.iter().
-        map(|wo| sum(wo.iter().zip(x).map(|(wi, xi)| wi.mul(xi))))
+pub fn linear(x: &[ValueRef], w: &Matrix) -> Vec<ValueRef> {
+    w.iter()
+        .map(|wo| sum(wo.iter().zip(x).map(|(wi, xi)| wi.mul(xi))))
         .collect()
 }
 
-pub fn softmax(logits: &Vec<ValueRef>) -> Vec<ValueRef> {
+pub fn softmax(logits: &[ValueRef]) -> Vec<ValueRef> {
     let max_val = Value::new(
         logits
             .iter()
@@ -40,12 +39,12 @@ pub fn softmax(logits: &Vec<ValueRef>) -> Vec<ValueRef> {
             .unwrap(),
     );
     let exps = logits.iter().map(|vals| vals.sub(&max_val).exp());
-    let total: ValueRef = sum(exps.clone().map(|v| v));
+    let total: ValueRef = sum(exps.clone());
 
     exps.map(|e| e.truediv(&total)).collect()
 }
 
-pub fn rmsnorm(x: &Vec<ValueRef>) -> Vec<ValueRef> {
+pub fn rmsnorm(x: &[ValueRef]) -> Vec<ValueRef> {
     let ms = sum(x.iter().map(|xi| xi.mul(xi))).truediv(&Value::new(x.len() as f64));
     let scale = ms.add(&Value::new(1e-5)).pow(-0.5);
     x.iter().map(|xi| xi.mul(&scale)).collect()
@@ -54,6 +53,7 @@ pub fn rmsnorm(x: &Vec<ValueRef>) -> Vec<ValueRef> {
 /// Snapshot shape: [layer][head][query_pos][key_pos] as f64 weights (triangular)
 pub type AttnSnapshot = Vec<Vec<Vec<Vec<f64>>>>;
 
+#[allow(clippy::too_many_arguments, clippy::ptr_arg)]
 pub fn gpt(
     token_id: usize,
     pos_id: usize,
@@ -69,6 +69,7 @@ pub fn gpt(
     )
 }
 
+#[allow(clippy::too_many_arguments, clippy::ptr_arg)]
 pub fn gpt_with_attn(
     token_id: usize,
     pos_id: usize,
@@ -101,7 +102,8 @@ pub fn gpt_with_attn(
 
             let q_h = &q[hs..hs + head_dim];
             let k_h: Vec<&[ValueRef]> = keys[li].iter().map(|ki| &ki[hs..hs + head_dim]).collect();
-            let v_h: Vec<&[ValueRef]> = values[li].iter().map(|vi| &vi[hs..hs + head_dim]).collect();
+            let v_h: Vec<&[ValueRef]> =
+                values[li].iter().map(|vi| &vi[hs..hs + head_dim]).collect();
             let attn_logits: Vec<ValueRef> = (0..k_h.len())
                 .map(|t| {
                     let dot_product: ValueRef = sum((0..head_dim).map(|j| q_h[j].mul(&k_h[t][j])));
@@ -127,11 +129,7 @@ pub fn gpt_with_attn(
             x_attn.extend(head_out);
         }
         x = linear(&x_attn, &state_dict[&format!("layer{li}.attn_wo")]);
-        x = x
-            .iter()
-            .zip(x_residual)
-            .map(|(a, b)| a.add(&b))
-            .collect();
+        x = x.iter().zip(x_residual).map(|(a, b)| a.add(&b)).collect();
 
         let x_residual = x.clone();
         x = rmsnorm(&x);
@@ -144,4 +142,3 @@ pub fn gpt_with_attn(
     let logits: Vec<Rc<RefCell<Value>>> = linear(&x, &state_dict["lm_head"]);
     logits
 }
-

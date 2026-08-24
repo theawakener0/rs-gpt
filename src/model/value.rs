@@ -1,6 +1,6 @@
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 pub type ValueRef = Rc<RefCell<Value>>;
 
@@ -15,7 +15,7 @@ pub struct Value {
 impl Value {
     pub fn new(data: f64) -> ValueRef {
         Rc::new(RefCell::new(Value {
-            data: data,
+            data,
             grad: 0.0,
             children: Vec::new(),
             local_grads: Vec::new(),
@@ -90,7 +90,7 @@ impl ValueOps for ValueRef {
             data: self.borrow().data.exp(),
             grad: 0.0,
             children: vec![self.clone()],
-            local_grads: vec![self.borrow().data.exp()]
+            local_grads: vec![self.borrow().data.exp()],
         }))
     }
 
@@ -132,6 +132,4 @@ impl ValueOps for ValueRef {
             }
         }
     }
-
 }
-

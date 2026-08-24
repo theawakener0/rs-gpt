@@ -13,8 +13,10 @@ pub struct Config {
     pub num_params: usize,
     pub n_layer: usize,
     pub n_head: usize,
+    #[allow(dead_code)]
     pub n_embd: usize,
     pub block_size: usize,
+    #[allow(dead_code)]
     pub head_dim: usize,
     pub num_steps: usize,
 }
@@ -37,11 +39,15 @@ pub struct App {
     // inference streaming
     pub inference_buf: String,
     pub inference_samples: Vec<String>,
+    #[allow(dead_code)]
     pub inference_done: bool,
+    #[allow(dead_code)]
     pub dataset_size: usize,
     pub vocab_size: usize,
     pub num_params: usize,
+    #[allow(dead_code)]
     pub chars: Vec<char>,
+    #[allow(dead_code)]
     pub bos: usize,
 
     // scroll + help
@@ -81,7 +87,14 @@ impl App {
         }
     }
 
-    pub fn push_step(&mut self, step: usize, loss: f64, lr: f64, grad_norm: f64, attn: Option<AttnSnapshot>) {
+    pub fn push_step(
+        &mut self,
+        step: usize,
+        loss: f64,
+        lr: f64,
+        grad_norm: f64,
+        attn: Option<AttnSnapshot>,
+    ) {
         self.step = step + 1;
         self.current_loss = loss;
         self.current_lr = lr;

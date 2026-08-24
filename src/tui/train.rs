@@ -53,6 +53,7 @@ impl Dataset {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn train_step(
     app: &App,
     step: usize,
@@ -113,8 +114,10 @@ pub fn train_step(
 
     let lr_t = train_state.learning_rate * (1.0 - (step as f64) / (app.num_steps as f64));
     for (i, p) in params.iter().enumerate() {
-        train_state.m[i] = train_state.beta1 * train_state.m[i] + (1.0 - train_state.beta1) * p.borrow().grad;
-        train_state.v[i] = train_state.beta2 * train_state.v[i] + (1.0 - train_state.beta2) * p.borrow().grad.powi(2);
+        train_state.m[i] =
+            train_state.beta1 * train_state.m[i] + (1.0 - train_state.beta1) * p.borrow().grad;
+        train_state.v[i] = train_state.beta2 * train_state.v[i]
+            + (1.0 - train_state.beta2) * p.borrow().grad.powi(2);
         let m_hat = train_state.m[i] / (1.0 - train_state.beta1.powi(step as i32 + 1));
         let v_hat = train_state.v[i] / (1.0 - train_state.beta2.powi(step as i32 + 1));
         p.borrow_mut().data -= lr_t * m_hat / (v_hat.powf(0.5) + train_state.eps);

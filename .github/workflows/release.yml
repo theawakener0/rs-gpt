@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish-crate:
+    name: Publish to crates.io (Trusted Publishing)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Verify tag matches Cargo.toml version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/v}"
+          # cargo metadata requires jq; if not present use python
+          VER=$(cargo metadata --format-version=1 --no-deps --quiet | python3 -c "import sys,json;print(json.load(sys.stdin)['packages'][0]['version'])")
+          echo "Tag version: $TAG"
+          echo "Cargo version: $VER"
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error::Tag v$TAG does not match Cargo.toml version $VER"
+            echo "Fix: update Cargo.toml version to $TAG or retag."
+            exit 1
+          fi
+
+      - name: Dry-run publish check
+        run: cargo publish --dry-run
+
+      # --- Trusted Publishing (OIDC) — no long-lived token ---
+      # One-time setup required at https://crates.io/crates/rs-gpt/settings/trusted-publishing
+      # Add: GitHub repo theawakener0/rs-gpt, workflow release.yml, environment (optional).
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+        with:
+          crates: rs-gpt
+
+      - name: Publish to crates.io
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  build-binaries:
+    name: Build release binaries (${{ matrix.target }})
+    needs: publish-crate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bin: rs-gpt
+            archive: rs-gpt-linux-x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bin: rs-gpt
+            archive: rs-gpt-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bin: rs-gpt
+            archive: rs-gpt-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: rs-gpt.exe
+            archive: rs-gpt-windows-x86_64.exe
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="target/${{ matrix.target }}/release/${{ matrix.bin }}"
+          DST="${{ matrix.archive }}"
+          if [ ! -f "$SRC" ]; then
+            echo "::error::Binary not found at $SRC"
+            ls -R target || true
+            exit 1
+          fi
+          cp "$SRC" "$DST"
+          ls -lh "$DST"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.archive }}
+          generate_release_notes: true
+          # creates the release if tag push didn't already; appends files

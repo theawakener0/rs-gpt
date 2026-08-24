@@ -1,16 +1,19 @@
 use crate::tui::app::{App, Phase};
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Chart, Dataset, Gauge, GraphType, Paragraph, Row, Sparkline, Table, Wrap},
-    Frame,
+    widgets::{
+        Block, Borders, Cell, Chart, Dataset, Gauge, GraphType, Paragraph, Row, Sparkline, Table,
+        Wrap,
+    },
 };
 
 // const FORGE_CHAR: Color = Color::Rgb(18, 16, 18);
 // const ANVIL: Color = Color::Rgb(59, 46, 42);
 const SMITHY: Color = Color::Rgb(43, 30, 22);
-const KILN: Color = Color::Rgb(80, 44, 30); 
+const KILN: Color = Color::Rgb(80, 44, 30);
 const HARD_RUST: Color = Color::Rgb(115, 64, 43);
 const RUST_ORANGE: Color = Color::Rgb(206, 66, 43);
 const EMBER: Color = Color::Rgb(232, 94, 37);
@@ -40,16 +43,22 @@ fn interpolate_color(t: f64) -> Color {
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
     if area.width < 60 || area.height < 20 {
-        let msg = Paragraph::new("Terminal too small — resize to at least 80x24 (q / Ctrl-C to quit)")
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(HARD_RUST))
-                    .title(Span::styled(" rs-gpt ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)))
-                    .style(Style::default().fg(CREAM)),
-            )
-            .style(Style::default().fg(STONE))
-            .wrap(Wrap { trim: true });
+        let msg =
+            Paragraph::new("Terminal too small — resize to at least 80x24 (q / Ctrl-C to quit)")
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(HARD_RUST))
+                        .title(Span::styled(
+                            " rs-gpt ",
+                            Style::default()
+                                .fg(RUST_ORANGE)
+                                .add_modifier(Modifier::BOLD),
+                        ))
+                        .style(Style::default().fg(CREAM)),
+                )
+                .style(Style::default().fg(STONE))
+                .wrap(Wrap { trim: true });
         frame.render_widget(msg, area);
         return;
     }
@@ -108,9 +117,16 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(KILN))
-                .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD))),
+                .title(Span::styled(
+                    title,
+                    Style::default().fg(SAND).add_modifier(Modifier::BOLD),
+                )),
         )
-        .gauge_style(Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD))
+        .gauge_style(
+            Style::default()
+                .fg(RUST_ORANGE)
+                .add_modifier(Modifier::BOLD),
+        )
         .percent(pct)
         .label(Span::styled(
             format!("{pct}%"),
@@ -131,8 +147,14 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
     let (y_min, y_max) = if loss_data.is_empty() {
         (0.0, 4.0)
     } else {
-        let min = loss_data.iter().map(|(_, y)| *y).fold(f64::INFINITY, f64::min);
-        let max = loss_data.iter().map(|(_, y)| *y).fold(f64::NEG_INFINITY, f64::max);
+        let min = loss_data
+            .iter()
+            .map(|(_, y)| *y)
+            .fold(f64::INFINITY, f64::min);
+        let max = loss_data
+            .iter()
+            .map(|(_, y)| *y)
+            .fold(f64::NEG_INFINITY, f64::max);
         let pad = (max - min) * 0.15 + 0.2;
         ((min - pad).max(0.0), max + pad)
     };
@@ -145,7 +167,11 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
                 .name("loss")
                 .marker(ratatui::symbols::Marker::Braille)
                 .graph_type(GraphType::Line)
-                .style(Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD))
+                .style(
+                    Style::default()
+                        .fg(RUST_ORANGE)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .data(&loss_data),
         ]
     };
@@ -178,7 +204,10 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
                 .bounds([y_min, y_max])
                 .labels(vec![
                     Span::styled(format!("{:.1}", y_min), Style::default().fg(STONE)),
-                    Span::styled(format!("{:.1}", (y_min + y_max) / 2.0), Style::default().fg(STONE)),
+                    Span::styled(
+                        format!("{:.1}", (y_min + y_max) / 2.0),
+                        Style::default().fg(STONE),
+                    ),
                     Span::styled(format!("{:.1}", y_max), Style::default().fg(STONE)),
                 ]),
         );
@@ -206,14 +235,21 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
             .map(|v| ((v / local_max) * 8.0).round().clamp(0.0, 8.0) as u64)
             .collect()
     };
-    let window_len = if app.grad_norms.len() > GRAD_WINDOW { GRAD_WINDOW } else { app.grad_norms.len() };
+    let window_len = if app.grad_norms.len() > GRAD_WINDOW {
+        GRAD_WINDOW
+    } else {
+        app.grad_norms.len()
+    };
     let sparkline = Sparkline::default()
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(KILN))
                 .title(Span::styled(
-                    format!(" Grad · forge (last {} ) ", if window_len == 0 { 0 } else { window_len }),
+                    format!(
+                        " Grad · forge (last {} ) ",
+                        if window_len == 0 { 0 } else { window_len }
+                    ),
                     Style::default().fg(SAND).add_modifier(Modifier::BOLD),
                 )),
         )
@@ -223,21 +259,37 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(sparkline, right[0]);
 
     // Stats block
-    let last_loss = app.losses.last().map(|(_, v)| format!("{:.4}", v)).unwrap_or_else(|| "—".to_string());
+    let last_loss = app
+        .losses
+        .last()
+        .map(|(_, v)| format!("{:.4}", v))
+        .unwrap_or_else(|| "—".to_string());
     let best_loss = if app.losses.is_empty() {
         "—".to_string()
     } else {
-        let m = app.losses.iter().map(|(_, v)| *v).fold(f64::INFINITY, f64::min);
+        let m = app
+            .losses
+            .iter()
+            .map(|(_, v)| *v)
+            .fold(f64::INFINITY, f64::min);
         format!("{:.4}", m)
     };
     let stats_text = vec![
         Line::from(vec![
             Span::styled("current: ", Style::default().fg(STONE)),
-            Span::styled(last_loss, Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                last_loss,
+                Style::default()
+                    .fg(RUST_ORANGE)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![
             Span::styled("best:    ", Style::default().fg(STONE)),
-            Span::styled(best_loss, Style::default().fg(ASH).add_modifier(Modifier::ITALIC)),
+            Span::styled(
+                best_loss,
+                Style::default().fg(ASH).add_modifier(Modifier::ITALIC),
+            ),
         ]),
         Line::from(vec![
             Span::styled("phase:   ", Style::default().fg(STONE)),
@@ -255,7 +307,10 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(KILN))
-            .title(Span::styled(" Stats ", Style::default().fg(SAND).add_modifier(Modifier::BOLD))),
+            .title(Span::styled(
+                " Stats ",
+                Style::default().fg(SAND).add_modifier(Modifier::BOLD),
+            )),
     );
     frame.render_widget(stats, right[1]);
 }
@@ -277,7 +332,10 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(KILN))
-        .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)));
+        .title(Span::styled(
+            title,
+            Style::default().fg(SAND).add_modifier(Modifier::BOLD),
+        ));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -320,9 +378,7 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
         .collect();
 
     let header_cells: Vec<Cell> = std::iter::once(Cell::from("").style(Style::default().fg(STONE)))
-        .chain((0..n_key).map(|k| {
-            Cell::from(format!("{k}")).style(Style::default().fg(STONE))
-        }))
+        .chain((0..n_key).map(|k| Cell::from(format!("{k}")).style(Style::default().fg(STONE))))
         .collect();
     let header = Row::new(header_cells).height(1);
     for qi in 0..n_query {
@@ -340,7 +396,11 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
                 interpolate_color(w)
             };
             // high heat gets ASH fg for contrast on ember
-            let fg = if !is_pad && !is_future && w > 0.6 { ASH } else { CREAM };
+            let fg = if !is_pad && !is_future && w > 0.6 {
+                ASH
+            } else {
+                CREAM
+            };
             let cell = Cell::from("  ").style(Style::default().bg(bg).fg(fg));
             cells.push(cell);
         }
@@ -348,7 +408,11 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     let table = Table::new(rows, constraints)
-        .header(header.style(Style::default().fg(SAND).add_modifier(Modifier::BOLD)).height(1))
+        .header(
+            header
+                .style(Style::default().fg(SAND).add_modifier(Modifier::BOLD))
+                .height(1),
+        )
         .block(Block::default())
         .column_spacing(0);
 
@@ -356,7 +420,11 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_inference(frame: &mut Frame, app: &mut App, area: Rect) {
-    let scroll_hint = if app.inference_follow { "follow" } else { "scroll" };
+    let scroll_hint = if app.inference_follow {
+        "follow"
+    } else {
+        "scroll"
+    };
     let title = format!(
         " Inference — {} samples  [{}]  (j/k PgUp/PgDn scroll, End follow) ",
         app.inference_samples.len(),
@@ -365,7 +433,10 @@ fn draw_inference(frame: &mut Frame, app: &mut App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(KILN))
-        .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)));
+        .title(Span::styled(
+            title,
+            Style::default().fg(SAND).add_modifier(Modifier::BOLD),
+        ));
 
     let mut lines: Vec<Line> = Vec::new();
     for (i, s) in app.inference_samples.iter().enumerate() {
@@ -384,7 +455,12 @@ fn draw_inference(frame: &mut Frame, app: &mut App, area: Rect) {
                 Style::default().fg(STONE).add_modifier(Modifier::ITALIC),
             ),
             Span::styled(app.inference_buf.clone(), Style::default().fg(CREAM)),
-            Span::styled("█", Style::default().fg(EMBER).add_modifier(Modifier::SLOW_BLINK | Modifier::BOLD)),
+            Span::styled(
+                "█",
+                Style::default()
+                    .fg(EMBER)
+                    .add_modifier(Modifier::SLOW_BLINK | Modifier::BOLD),
+            ),
         ]));
     } else if app.phase == Phase::Done {
         lines.push(Line::from(Span::styled(
@@ -409,12 +485,8 @@ fn draw_inference(frame: &mut Frame, app: &mut App, area: Rect) {
         lines
             .iter()
             .map(|l| {
-                let w = l.width() as usize;
-                if w == 0 {
-                    1
-                } else {
-                    (w + inner_w - 1) / inner_w
-                }
+                let w = l.width();
+                if w == 0 { 1 } else { w.div_ceil(inner_w) }
             })
             .sum()
     };
@@ -434,7 +506,9 @@ fn draw_inference(frame: &mut Frame, app: &mut App, area: Rect) {
 }
 
 fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let key_style = Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD);
+    let key_style = Style::default()
+        .fg(RUST_ORANGE)
+        .add_modifier(Modifier::BOLD);
     let desc_style = Style::default().fg(CREAM);
     let sep = Span::styled(" │ ", Style::default().fg(STONE));
     let quit_style = if app.phase == Phase::Done {
@@ -495,28 +569,101 @@ fn draw_help(frame: &mut Frame, area: Rect) {
     let popup_area = {
         let v = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)])
+            .constraints([
+                Constraint::Percentage(25),
+                Constraint::Percentage(50),
+                Constraint::Percentage(25),
+            ])
             .split(area);
         let h = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)])
+            .constraints([
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
+                Constraint::Percentage(20),
+            ])
             .split(v[1]);
         h[1]
     };
     frame.render_widget(Clear, popup_area);
     let help_lines = vec![
-        Line::from(Span::styled("Keys", Style::default().fg(EMBER).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "Keys",
+            Style::default().fg(EMBER).add_modifier(Modifier::BOLD),
+        )),
         Line::from(""),
-        Line::from(vec![Span::styled(" q / Q / Ctrl-C  ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("quit (any phase)")]),
-        Line::from(vec![Span::styled(" ← / →          ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("cycle attention layer")]),
-        Line::from(vec![Span::styled(" ↑ / ↓          ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("cycle attention head")]),
-        Line::from(vec![Span::styled(" j / k          ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("scroll inference 1 line (auto-follow off)")]),
-        Line::from(vec![Span::styled(" PgUp / PgDn    ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("scroll page")]),
-        Line::from(vec![Span::styled(" Home / End / G ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("top / bottom (End re-enables follow)")]),
-        Line::from(vec![Span::styled(" ? / Esc        ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)), Span::raw("toggle / close help")]),
+        Line::from(vec![
+            Span::styled(
+                " q / Q / Ctrl-C  ",
+                Style::default()
+                    .fg(RUST_ORANGE)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("quit (any phase)"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " ← / →          ",
+                Style::default()
+                    .fg(RUST_ORANGE)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("cycle attention layer"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " ↑ / ↓          ",
+                Style::default()
+                    .fg(RUST_ORANGE)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("cycle attention head"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " j / k          ",
+                Style::default()
+                    .fg(RUST_ORANGE)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("scroll inference 1 line (auto-follow off)"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " PgUp / PgDn    ",
+                Style::default()
+                    .fg(RUST_ORANGE)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("scroll page"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " Home / End / G ",
+                Style::default()
+                    .fg(RUST_ORANGE)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("top / bottom (End re-enables follow)"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " ? / Esc        ",
+                Style::default()
+                    .fg(RUST_ORANGE)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("toggle / close help"),
+        ]),
         Line::from(""),
-        Line::from(Span::styled("Inference auto-follows newest samples; scroll to inspect history.", Style::default().fg(STONE).add_modifier(Modifier::ITALIC))),
-        Line::from(Span::styled("Header shows training progress; heatmap fixed 16×16 (q/ctx to quit).", Style::default().fg(STONE).add_modifier(Modifier::ITALIC))),
+        Line::from(Span::styled(
+            "Inference auto-follows newest samples; scroll to inspect history.",
+            Style::default().fg(STONE).add_modifier(Modifier::ITALIC),
+        )),
+        Line::from(Span::styled(
+            "Header shows training progress; heatmap fixed 16×16 (q/ctx to quit).",
+            Style::default().fg(STONE).add_modifier(Modifier::ITALIC),
+        )),
     ];
     let para = Paragraph::new(help_lines)
         .block(block)

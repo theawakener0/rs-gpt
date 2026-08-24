@@ -133,7 +133,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                 &logits
                     .iter()
                     .map(|l| l.truediv(&Value::new(temperature)))
-                    .collect(),
+                    .collect::<Vec<_>>(),
             );
             token_id = *(0..vocab_size)
                 .collect::<Vec<usize>>()
@@ -143,7 +143,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             }
             sample.push(uchars[token_id]);
         }
-        print!("sample {:2}: {}\n", sample_idx + 1, String::from_iter(sample));
+        println!("sample {:2}: {}", sample_idx + 1, String::from_iter(sample));
     }
 
     Ok(())

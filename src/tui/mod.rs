@@ -116,7 +116,17 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     app.push_step(step, loss, lr, grad_norm, attn);
                     step += 1;
                 } else {
+                    // Phase already transitioned to Sampling via App::push_step after
+                    // step 999; sampler will be lazy-created on first Sampling tick.
+                    // Keep this branch as fallback if push_step transition is ever removed.
                     app.phase = Phase::Sampling;
+                }
+            }
+            Phase::Sampling => {
+                // Lazy-init: push_step() already transitions phase to Sampling after the
+                // last training step, so the Training `else` branch that used to create
+                // the sampler is never reached. Ensure sampler exists on first Sampling tick.
+                if sampler.is_none() {
                     sampler = Some(Sampler::new(
                         n_layer,
                         n_head,
@@ -129,8 +139,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     ));
                     last_sample_tick = Instant::now();
                 }
-            }
-            Phase::Sampling => {
                 if last_sample_tick.elapsed() >= sample_interval {
                     last_sample_tick = Instant::now();
                     if let Some(s) = sampler.as_mut() {

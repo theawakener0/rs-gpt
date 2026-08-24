@@ -25,6 +25,9 @@ cd rs-gpt
 cargo install --path .
 ```
 
+> [!NOTE]
+> Prebuilt binaries for Linux, macOS, and Windows are attached to every [GitHub release](https://github.com/theawakener0/rs-gpt/releases).
+
 ## Usage
 
 ```bash

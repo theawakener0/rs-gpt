@@ -1,6 +1,6 @@
 [package]
 name = "rs-gpt"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.85"
 description = "A Rust implementation of Andrej Karpathy's microgpt"
@@ -9,6 +9,7 @@ repository = "https://github.com/theawakener0/rs-gpt"
 readme = "README.md"
 keywords = ["gpt", "llm", "autograd", "tui"]
 categories = ["science", "command-line-utilities"]
+exclude = ["/target", "/.github"]
 include = ["src/**/*", "dataset/input.txt", "Cargo.toml", "README.md", "LICENSE"]
 
 [dependencies]

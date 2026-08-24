@@ -17,23 +17,25 @@ fn interpolate_color(t: f64) -> Color {
     Color::Rgb(r, g, b)
 }
 
-pub fn draw(frame: &mut Frame, app: &App) {
+pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
     if area.width < 60 || area.height < 20 {
-        let msg = Paragraph::new("Terminal too small — resize to at least 80x24 (q to quit)")
+        let msg = Paragraph::new("Terminal too small — resize to at least 80x24 (q / Ctrl-C to quit)")
             .block(Block::default().borders(Borders::ALL).title(" rs-gpt "))
             .wrap(Wrap { trim: true });
         frame.render_widget(msg, area);
+        // still show footer hint even when small
         return;
     }
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // header
+            Constraint::Length(3),      // header
             Constraint::Percentage(35), // loss + grad
             Constraint::Percentage(35), // attention
-            Constraint::Min(8),     // inference
+            Constraint::Min(8),         // inference
+            Constraint::Length(1),      // footer (persistent exit hint)
         ])
         .split(area);
 
@@ -41,6 +43,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
     draw_loss_row(frame, app, chunks[1]);
     draw_attention(frame, app, chunks[2]);
     draw_inference(frame, app, chunks[3]);
+    draw_footer(frame, app, chunks[4]);
+    if app.show_help {
+        draw_help(frame, area);
+    }
 }
 
 fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -150,22 +156,28 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(cols[1]);
 
-    // Sparkline needs &[u64]; scale grad_norms
+    // Sparkline: sliding window with local max so it keeps changing instead of flattening
+    const GRAD_WINDOW: usize = 64;
     let spark_data: Vec<u64> = if app.grad_norms.is_empty() {
         vec![0]
     } else {
-        let max = app.grad_norms.iter().cloned().fold(0.0_f64, f64::max).max(1e-6);
-        app.grad_norms
+        let window: &[f64] = if app.grad_norms.len() > GRAD_WINDOW {
+            &app.grad_norms[app.grad_norms.len() - GRAD_WINDOW..]
+        } else {
+            &app.grad_norms
+        };
+        let local_max = window.iter().cloned().fold(0.0_f64, f64::max).max(1e-6);
+        window
             .iter()
-            .map(|v| ((v / max) * 8.0).round() as u64)
+            .map(|v| ((v / local_max) * 8.0).round().clamp(0.0, 8.0) as u64)
             .collect()
     };
-
+    let window_len = if app.grad_norms.len() > GRAD_WINDOW { GRAD_WINDOW } else { app.grad_norms.len() };
     let sparkline = Sparkline::default()
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Grad |g| ")
+                .title(format!(" Grad |g| (last {} ) ", if window_len == 0 { 0 } else { window_len }))
                 .title_style(Style::default().fg(Color::Magenta)),
         )
         .data(&spark_data)
@@ -252,43 +264,40 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    let _n_query = head.len();
-    // infer max key len
-    let n_key = head.iter().map(|row| row.len()).max().unwrap_or(0);
-    if n_key == 0 {
-        return;
-    }
+    // Fixed size to block_size so x-axis never resizes (pad shorter sequences with dim cells)
+    let n_key = app.config.block_size;
+    let n_query = app.config.block_size;
 
     // Build table: header row = key positions, then each query row
     let mut rows: Vec<Row> = Vec::new();
 
-    // Constraints: each column fixed width 3 (for "  " with bg + space) or 4
+    // Constraints: fixed 16 columns + row label = stable 52 width
     let constraints: Vec<Constraint> = std::iter::once(Constraint::Length(4))
         .chain((0..n_key).map(|_| Constraint::Length(3)))
         .collect();
 
-    // Header: empty corner + key indices
+    // Header: empty corner + key indices (0..block_size constant)
     let header_cells: Vec<Cell> = std::iter::once(Cell::from("").style(Style::default().fg(Color::DarkGray)))
         .chain((0..n_key).map(|k| {
             Cell::from(format!("{k}")).style(Style::default().fg(Color::DarkGray))
         }))
         .collect();
     let header = Row::new(header_cells).height(1);
-    // We will render manually with Table header
-    // Build rows for each query
-    for (qi, row_weights) in head.iter().enumerate() {
+    // Build rows for fixed n_query x n_key grid, padding beyond actual data
+    for qi in 0..n_query {
+        let row_weights = head.get(qi);
         let mut cells: Vec<Cell> = Vec::with_capacity(n_key + 1);
         cells.push(Cell::from(format!("{qi}")).style(Style::default().fg(Color::Gray)));
         for ki in 0..n_key {
-            let w = row_weights.get(ki).copied().unwrap_or(0.0);
-            // future masking: query should not attend to future keys; weight ~0 => dim
+            let w = row_weights.and_then(|r| r.get(ki).copied()).unwrap_or(0.0);
+            let beyond_data = row_weights.is_none() || ki >= row_weights.unwrap().len();
             let is_future = ki > qi;
-            let bg = if is_future {
+            let is_pad = beyond_data;
+            let bg = if is_pad || is_future {
                 Color::Rgb(20, 20, 20)
             } else {
                 interpolate_color(w)
             };
-            // Use "  " with bg to form heat cell; overlay weight as narrow block
             let cell = Cell::from("  ").style(Style::default().bg(bg).fg(Color::White));
             cells.push(cell);
         }
@@ -303,10 +312,12 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(table, inner);
 }
 
-fn draw_inference(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_inference(frame: &mut Frame, app: &mut App, area: Rect) {
+    let scroll_hint = if app.inference_follow { "follow" } else { "scroll" };
     let title = format!(
-        " Inference — {} samples  (streaming ~30fps) ",
-        app.inference_samples.len()
+        " Inference — {} samples  [{}]  (j/k PgUp/PgDn scroll, End follow) ",
+        app.inference_samples.len(),
+        scroll_hint
     );
     let block = Block::default()
         .borders(Borders::ALL)
@@ -334,7 +345,7 @@ fn draw_inference(frame: &mut Frame, app: &App, area: Rect) {
         ]));
     } else if app.phase == Phase::Done {
         lines.push(Line::from(Span::styled(
-            "— done —  (q to quit, ←→/↑↓ to inspect attention)",
+            "— done —  (footer: q to quit, ←→/↑↓ inspect attention, ? help)",
             Style::default().fg(Color::DarkGray),
         )));
     } else if app.inference_samples.is_empty() && app.phase == Phase::Training {
@@ -344,9 +355,125 @@ fn draw_inference(frame: &mut Frame, app: &App, area: Rect) {
         )));
     }
 
+    // Auto-scroll logic: Paragraph::scroll offset is in wrapped rows, not logical lines.
+    let inner = block.inner(area);
+    app.inference_inner_height = inner.height;
+    let viewport_h = inner.height as usize;
+    let inner_w = inner.width as usize;
+    let content_h: usize = if inner_w == 0 {
+        lines.len()
+    } else {
+        lines
+            .iter()
+            .map(|l| {
+                let w = l.width() as usize;
+                if w == 0 {
+                    1
+                } else {
+                    (w + inner_w - 1) / inner_w
+                }
+            })
+            .sum()
+    };
+    let max_scroll = content_h.saturating_sub(viewport_h) as u16;
+    if app.inference_follow {
+        app.inference_scroll = max_scroll;
+    } else {
+        app.inference_scroll = app.inference_scroll.min(max_scroll);
+    }
+
     let para = Paragraph::new(lines)
         .block(block)
-        .wrap(Wrap { trim: false });
+        .wrap(Wrap { trim: false })
+        .scroll((app.inference_scroll, 0));
 
     frame.render_widget(para, area);
+}
+
+fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
+    let key_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+    let desc_style = Style::default().fg(Color::White);
+    let sep = Span::styled(" │ ", Style::default().fg(Color::DarkGray));
+    let quit_style = if app.phase == Phase::Done {
+        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+    } else {
+        key_style
+    };
+    // Truncate gracefully on narrow terminals
+    let width = area.width as usize;
+    let full = vec![
+        Span::styled(" q ", quit_style),
+        Span::styled("quit", desc_style),
+        sep.clone(),
+        Span::styled(" Ctrl-C ", key_style),
+        Span::styled("exit", desc_style),
+        sep.clone(),
+        Span::styled(" ←/→ ", key_style),
+        Span::styled("layer", desc_style),
+        sep.clone(),
+        Span::styled(" ↑/↓ ", key_style),
+        Span::styled("head", desc_style),
+        sep.clone(),
+        Span::styled(" j/k ", key_style),
+        Span::styled("scroll", desc_style),
+        sep.clone(),
+        Span::styled(" PgUp/PgDn ", key_style),
+        Span::styled("page", desc_style),
+        sep.clone(),
+        Span::styled(" ? ", key_style),
+        Span::styled("help", desc_style),
+    ];
+    let short = vec![
+        Span::styled(" q", quit_style),
+        Span::styled(":quit", desc_style),
+        Span::styled(" ^C:exit ", key_style),
+        Span::styled(" ?:help", key_style),
+    ];
+    let line = if width < 80 {
+        Line::from(short)
+    } else {
+        Line::from(full)
+    };
+    let para = Paragraph::new(line).style(Style::default().bg(Color::Rgb(40, 40, 40)).fg(Color::White));
+    frame.render_widget(para, area);
+}
+
+fn draw_help(frame: &mut Frame, area: Rect) {
+    use ratatui::widgets::Clear;
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Help — ?/Esc to close ")
+        .title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .style(Style::default().bg(Color::Black).fg(Color::White));
+    // centered popup 60% x 50%
+    let popup_area = {
+        let v = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)])
+            .split(area);
+        let h = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)])
+            .split(v[1]);
+        h[1]
+    };
+    frame.render_widget(Clear, popup_area);
+    let help_lines = vec![
+        Line::from(Span::styled("Keys", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from(vec![Span::styled(" q / Q / Ctrl-C  ", Style::default().fg(Color::Cyan)), Span::raw("quit (any phase)")]),
+        Line::from(vec![Span::styled(" ← / →          ", Style::default().fg(Color::Cyan)), Span::raw("cycle attention layer")]),
+        Line::from(vec![Span::styled(" ↑ / ↓          ", Style::default().fg(Color::Cyan)), Span::raw("cycle attention head")]),
+        Line::from(vec![Span::styled(" j / k          ", Style::default().fg(Color::Cyan)), Span::raw("scroll inference 1 line (auto-follow off)")]),
+        Line::from(vec![Span::styled(" PgUp / PgDn    ", Style::default().fg(Color::Cyan)), Span::raw("scroll page")]),
+        Line::from(vec![Span::styled(" Home / End / G ", Style::default().fg(Color::Cyan)), Span::raw("top / bottom (End re-enables follow)")]),
+        Line::from(vec![Span::styled(" ? / Esc        ", Style::default().fg(Color::Cyan)), Span::raw("toggle / close help")]),
+        Line::from(""),
+        Line::from(Span::styled("Inference auto-follows newest samples; scroll to inspect history.", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("Header shows training progress; heatmap fixed 16×16 (q/ctx to quit).", Style::default().fg(Color::DarkGray))),
+    ];
+    let para = Paragraph::new(help_lines)
+        .block(block)
+        .wrap(Wrap { trim: true });
+    frame.render_widget(para, popup_area);
 }

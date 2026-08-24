@@ -9,7 +9,7 @@ use crate::tui::app::{App, Config, Phase};
 use crate::tui::sample::Sampler;
 use crate::tui::train::{Dataset, TrainState};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -63,7 +63,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     // terminal setup
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -71,7 +71,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let orig_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
         orig_hook(info);
     }));
 
@@ -85,16 +85,62 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     loop {
         // input
         if event::poll(Duration::from_millis(16))? {
-            if let Event::Key(k) = event::read()? {
-                match k.code {
+            match event::read()? {
+                Event::Key(k) => match k.code {
                     KeyCode::Char('q') | KeyCode::Char('Q') => break,
                     KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => break,
+                    KeyCode::Esc if app.show_help => app.show_help = false,
+                    KeyCode::Char('?') => app.show_help = !app.show_help,
+                    KeyCode::Char('/') if !k.modifiers.contains(KeyModifiers::CONTROL) => app.show_help = !app.show_help,
                     KeyCode::Left => app.cycle_layer(-1),
                     KeyCode::Right => app.cycle_layer(1),
                     KeyCode::Up => app.cycle_head(-1),
                     KeyCode::Down => app.cycle_head(1),
+                    // inference scroll — j/k line, PgUp/PgDn page, Home/End, G/g
+                    // Wrapped content max unknown until next draw; just adjust offset and let draw clamp.
+                    // Follow re-enabled only by End/G to keep manual inspection stable.
+                    KeyCode::Char('j') => {
+                        app.inference_scroll = app.inference_scroll.saturating_add(1);
+                        app.inference_follow = false;
+                    }
+                    KeyCode::Char('k') => {
+                        app.inference_scroll = app.inference_scroll.saturating_sub(1);
+                        app.inference_follow = false;
+                    }
+                    KeyCode::PageDown => {
+                        let h = app.inference_inner_height.max(1);
+                        app.inference_scroll = app.inference_scroll.saturating_add(h);
+                        app.inference_follow = false;
+                    }
+                    KeyCode::PageUp => {
+                        let h = app.inference_inner_height.max(1);
+                        app.inference_scroll = app.inference_scroll.saturating_sub(h);
+                        app.inference_follow = false;
+                    }
+                    KeyCode::Home | KeyCode::Char('g') => {
+                        app.inference_scroll = 0;
+                        app.inference_follow = false;
+                    }
+                    KeyCode::End | KeyCode::Char('G') => {
+                        app.inference_follow = true;
+                    }
                     _ => {}
+                },
+                Event::Mouse(me) => {
+                    use crossterm::event::MouseEventKind;
+                    match me.kind {
+                        MouseEventKind::ScrollDown => {
+                            app.inference_scroll = app.inference_scroll.saturating_add(3);
+                            app.inference_follow = false;
+                        }
+                        MouseEventKind::ScrollUp => {
+                            app.inference_scroll = app.inference_scroll.saturating_sub(3);
+                            app.inference_follow = false;
+                        }
+                        _ => {}
+                    }
                 }
+                _ => {}
             }
         }
 
@@ -179,7 +225,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             }
         }
 
-        terminal.draw(|f| ui::draw(f, &app))?;
+        terminal.draw(|f| ui::draw(f, &mut app))?;
 
         // exit condition for non-interactive test: Done and no event for a bit we could break, but keep running
         // we will break only on q
@@ -187,7 +233,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     // restore
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
 
     // drop panic hook

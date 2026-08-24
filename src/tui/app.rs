@@ -42,6 +42,11 @@ pub struct App {
     pub num_params: usize,
     pub chars: Vec<char>,
     pub bos: usize,
+    // scroll + help
+    pub inference_scroll: u16,
+    pub inference_follow: bool,
+    pub inference_inner_height: u16,
+    pub show_help: bool,
 }
 
 impl App {
@@ -67,6 +72,10 @@ impl App {
             num_params: config.num_params,
             chars,
             bos,
+            inference_scroll: 0,
+            inference_follow: true,
+            inference_inner_height: 0,
+            show_help: false,
         }
     }
 

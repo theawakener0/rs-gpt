@@ -5,10 +5,6 @@
 </p>
 
 
-[![CI](https://github.com/theawakener0/rs-gpt/actions/workflows/ci.yml/badge.svg)](https://github.com/theawakener0/rs-gpt/actions)
-[![crates.io](https://img.shields.io/crates/v/rs-gpt.svg)](https://crates.io/crates/rs-gpt)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
 A Rust implementation of Andrej Karpathy's [microgpt](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95).
 
 ## Installation

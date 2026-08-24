@@ -8,9 +8,11 @@ use ratatui::{
 };
 
 // ── Rust Forge palette — full monochrome, tonal depth (all forge) ──
-const FORGE_CHAR: Color = Color::Rgb(18, 16, 18);   // deepest void behind anvil
-const SMITHY: Color = Color::Rgb(43, 30, 22);       // surface / pad / card
-const ANVIL: Color = Color::Rgb(59, 46, 42);        // warm panel bg (mdBook sidebar)
+#[allow(dead_code)]
+const FORGE_CHAR: Color = Color::Rgb(18, 16, 18);   // deepest (now transparent, kept for reference)
+#[allow(dead_code)]
+const ANVIL: Color = Color::Rgb(59, 46, 42);        // warm panel bg (transparent now, kept for reference)
+const SMITHY: Color = Color::Rgb(43, 30, 22);       // surface / pad / card (still used for heatmap pad)
 const KILN: Color = Color::Rgb(80, 44, 30);         // border mid
 const HARD_RUST: Color = Color::Rgb(115, 64, 43);   // deep rust border highlight
 const RUST_ORANGE: Color = Color::Rgb(206, 66, 43); // #CE422B canonical Ferris/Cargo
@@ -48,7 +50,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(HARD_RUST))
                     .title(Span::styled(" rs-gpt ", Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD)))
-                    .style(Style::default().bg(FORGE_CHAR).fg(CREAM)),
+                    .style(Style::default().fg(CREAM)),
             )
             .style(Style::default().fg(STONE))
             .wrap(Wrap { trim: true });
@@ -110,10 +112,9 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(KILN))
-                .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)))
-                .style(Style::default().bg(ANVIL)),
+                .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD))),
         )
-        .gauge_style(Style::default().fg(RUST_ORANGE).bg(SMITHY).add_modifier(Modifier::BOLD))
+        .gauge_style(Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD))
         .percent(pct)
         .label(Span::styled(
             format!("{pct}%"),
@@ -161,8 +162,7 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
                 .title(Span::styled(
                     format!(" Loss  ({} points) ", loss_data.len()),
                     Style::default().fg(SAND).add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(ANVIL)),
+                )),
         )
         .x_axis(
             ratatui::widgets::Axis::default()
@@ -219,8 +219,7 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
                 .title(Span::styled(
                     format!(" Grad · forge (last {} ) ", if window_len == 0 { 0 } else { window_len }),
                     Style::default().fg(SAND).add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(ANVIL)),
+                )),
         )
         .data(&spark_data)
         .max(8)
@@ -260,8 +259,7 @@ fn draw_loss_row(frame: &mut Frame, app: &App, area: Rect) {
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(KILN))
-            .title(Span::styled(" Stats ", Style::default().fg(SAND).add_modifier(Modifier::BOLD)))
-            .style(Style::default().bg(ANVIL)),
+            .title(Span::styled(" Stats ", Style::default().fg(SAND).add_modifier(Modifier::BOLD))),
     );
     frame.render_widget(stats, right[1]);
 }
@@ -283,8 +281,7 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(KILN))
-        .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)))
-        .style(Style::default().bg(ANVIL));
+        .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -360,7 +357,7 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
 
     let table = Table::new(rows, constraints)
         .header(header.style(Style::default().fg(SAND).add_modifier(Modifier::BOLD)).height(1))
-        .block(Block::default().style(Style::default().bg(ANVIL)))
+        .block(Block::default())
         .column_spacing(0);
 
     frame.render_widget(table, inner);
@@ -376,8 +373,7 @@ fn draw_inference(frame: &mut Frame, app: &mut App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(KILN))
-        .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)))
-        .style(Style::default().bg(ANVIL));
+        .title(Span::styled(title, Style::default().fg(SAND).add_modifier(Modifier::BOLD)));
 
     let mut lines: Vec<Line> = Vec::new();
     for (i, s) in app.inference_samples.iter().enumerate() {
@@ -489,7 +485,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     } else {
         Line::from(full)
     };
-    let para = Paragraph::new(line).style(Style::default().bg(ANVIL).fg(CREAM));
+    let para = Paragraph::new(line).style(Style::default().fg(CREAM));
     frame.render_widget(para, area);
 }
 
@@ -502,7 +498,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
             " Help — ?/Esc to close ",
             Style::default().fg(SAND).add_modifier(Modifier::BOLD),
         ))
-        .style(Style::default().bg(SMITHY).fg(CREAM));
+        .style(Style::default().fg(CREAM));
     // centered popup 60% x 50%
     let popup_area = {
         let v = Layout::default()

@@ -109,7 +109,6 @@ impl Sampler {
             let was_empty = self.current_sample.is_empty();
             self.reset();
             if was_empty {
-                // empty sample due to immediate BOS, emit newline marker
                 return Some(None);
             }
             return Some(None);

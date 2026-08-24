@@ -20,7 +20,6 @@ use std::io;
 use std::time::{Duration, Instant};
 
 pub fn run() -> Result<(), Box<dyn Error>> {
-    // dataset loading (shared)
     let dataset = Dataset::load("dataset/input.txt");
     let n_layer = 1;
     let n_embd = 16;
@@ -30,7 +29,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let vocab_size = dataset.vocab_size;
     let num_steps = 1000;
 
-    // state_dict init
     let mut state_dict: HashMap<String, crate::model::layers::Matrix> = HashMap::new();
     state_dict.insert(String::from("wtc"), matrix(vocab_size, n_embd));
     state_dict.insert(String::from("wpe"), matrix(block_size, n_embd));
@@ -67,7 +65,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // panic hook to restore terminal
     let orig_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
@@ -78,12 +75,11 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let mut sampler: Option<Sampler> = None;
     let mut rng = rand::rng();
     let mut last_sample_tick = Instant::now();
-    let sample_interval = Duration::from_millis(33); // ~30fps typing
+    let sample_interval = Duration::from_millis(33);
 
     let mut step: usize = 0;
 
     loop {
-        // input
         if event::poll(Duration::from_millis(16))? {
             match event::read()? {
                 Event::Key(k) => match k.code {
@@ -96,9 +92,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     KeyCode::Right => app.cycle_layer(1),
                     KeyCode::Up => app.cycle_head(-1),
                     KeyCode::Down => app.cycle_head(1),
-                    // inference scroll — j/k line, PgUp/PgDn page, Home/End, G/g
-                    // Wrapped content max unknown until next draw; just adjust offset and let draw clamp.
-                    // Follow re-enabled only by End/G to keep manual inspection stable.
                     KeyCode::Char('j') => {
                         app.inference_scroll = app.inference_scroll.saturating_add(1);
                         app.inference_follow = false;
@@ -162,16 +155,10 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     app.push_step(step, loss, lr, grad_norm, attn);
                     step += 1;
                 } else {
-                    // Phase already transitioned to Sampling via App::push_step after
-                    // step 999; sampler will be lazy-created on first Sampling tick.
-                    // Keep this branch as fallback if push_step transition is ever removed.
                     app.phase = Phase::Sampling;
                 }
             }
             Phase::Sampling => {
-                // Lazy-init: push_step() already transitions phase to Sampling after the
-                // last training step, so the Training `else` branch that used to create
-                // the sampler is never reached. Ensure sampler exists on first Sampling tick.
                 if sampler.is_none() {
                     sampler = Some(Sampler::new(
                         n_layer,
@@ -190,8 +177,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                     if let Some(s) = sampler.as_mut() {
                         match s.step(&state_dict, &mut rng) {
                             None => {
-                                // all samples done
-                                // flush any remaining buf
                                 if !app.inference_buf.is_empty() {
                                     app.inference_samples.push(app.inference_buf.clone());
                                     app.inference_buf.clear();
@@ -204,14 +189,11 @@ pub fn run() -> Result<(), Box<dyn Error>> {
                                         app.inference_buf.push(ch);
                                     }
                                     None => {
-                                        // sample boundary — push completed sample
                                         if !app.inference_buf.is_empty() {
                                             let completed = app.inference_buf.clone();
                                             app.inference_samples.push(completed);
                                             app.inference_buf.clear();
                                         } else if s.samples_generated > app.inference_samples.len() {
-                                            // empty sample (immediate BOS) — push empty marker as blank line
-                                            // skip to avoid clutter
                                         }
                                     }
                                 }
@@ -227,8 +209,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
         terminal.draw(|f| ui::draw(f, &mut app))?;
 
-        // exit condition for non-interactive test: Done and no event for a bit we could break, but keep running
-        // we will break only on q
     }
 
     // restore
@@ -236,7 +216,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
 
-    // drop panic hook
     let _ = std::panic::take_hook();
 
     Ok(())

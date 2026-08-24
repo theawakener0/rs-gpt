@@ -24,7 +24,7 @@ pub struct App {
     pub phase: Phase,
     pub step: usize,
     pub num_steps: usize,
-    pub losses: Vec<(f64, f64)>,      // (step, loss)
+    pub losses: Vec<(f64, f64)>,
     pub grad_norms: Vec<f64>,
     pub current_loss: f64,
     pub current_lr: f64,
@@ -33,6 +33,7 @@ pub struct App {
     pub selected_layer: usize,
     pub selected_head: usize,
     pub config: Config,
+
     // inference streaming
     pub inference_buf: String,
     pub inference_samples: Vec<String>,
@@ -42,6 +43,7 @@ pub struct App {
     pub num_params: usize,
     pub chars: Vec<char>,
     pub bos: usize,
+
     // scroll + help
     pub inference_scroll: u16,
     pub inference_follow: bool,
@@ -80,7 +82,7 @@ impl App {
     }
 
     pub fn push_step(&mut self, step: usize, loss: f64, lr: f64, grad_norm: f64, attn: Option<AttnSnapshot>) {
-        self.step = step + 1; // 1-indexed for display
+        self.step = step + 1;
         self.current_loss = loss;
         self.current_lr = lr;
         self.current_grad_norm = grad_norm;

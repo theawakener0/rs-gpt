@@ -7,24 +7,20 @@ use ratatui::{
     Frame,
 };
 
-// ── Rust Forge palette — full monochrome, tonal depth (all forge) ──
-#[allow(dead_code)]
-const FORGE_CHAR: Color = Color::Rgb(18, 16, 18);   // deepest (now transparent, kept for reference)
-#[allow(dead_code)]
-const ANVIL: Color = Color::Rgb(59, 46, 42);        // warm panel bg (transparent now, kept for reference)
-const SMITHY: Color = Color::Rgb(43, 30, 22);       // surface / pad / card (still used for heatmap pad)
-const KILN: Color = Color::Rgb(80, 44, 30);         // border mid
-const HARD_RUST: Color = Color::Rgb(115, 64, 43);   // deep rust border highlight
-const RUST_ORANGE: Color = Color::Rgb(206, 66, 43); // #CE422B canonical Ferris/Cargo
-const EMBER: Color = Color::Rgb(232, 94, 37);       // hot ember glow (peak)
-const SAND: Color = Color::Rgb(222, 165, 132);      // DEA584 sand highlight
-const ASH: Color = Color::Rgb(255, 231, 194);       // hot cream peak t=1.0
-const CREAM: Color = Color::Rgb(235, 219, 178);     // body text warm white
-const STONE: Color = Color::Rgb(103, 115, 122);     // muted labels
+// const FORGE_CHAR: Color = Color::Rgb(18, 16, 18);
+// const ANVIL: Color = Color::Rgb(59, 46, 42);
+const SMITHY: Color = Color::Rgb(43, 30, 22);
+const KILN: Color = Color::Rgb(80, 44, 30); 
+const HARD_RUST: Color = Color::Rgb(115, 64, 43);
+const RUST_ORANGE: Color = Color::Rgb(206, 66, 43);
+const EMBER: Color = Color::Rgb(232, 94, 37);
+const SAND: Color = Color::Rgb(222, 165, 132);
+const ASH: Color = Color::Rgb(255, 231, 194);
+const CREAM: Color = Color::Rgb(235, 219, 178);
+const STONE: Color = Color::Rgb(103, 115, 122);
 
 fn interpolate_color(t: f64) -> Color {
     let t = t.clamp(0.0, 1.0);
-    // 5-stop forge: char(18,16,18) → hard_rust(115,64,43) → crate(206,66,43) → sand(222,165,132) → ash(255,231,194)
     let (r, g, b) = if t < 0.3 {
         let k = t / 0.3;
         (18.0 + k * 97.0, 16.0 + k * 48.0, 18.0 + k * 25.0)
@@ -61,11 +57,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),      // header
-            Constraint::Percentage(35), // loss + grad
-            Constraint::Percentage(35), // attention
-            Constraint::Min(8),         // inference
-            Constraint::Length(1),      // footer (persistent exit hint)
+            Constraint::Length(3),
+            Constraint::Percentage(35),
+            Constraint::Percentage(35),
+            Constraint::Min(8),
+            Constraint::Length(1),
         ])
         .split(area);
 
@@ -313,26 +309,22 @@ fn draw_attention(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    // Fixed size to block_size so x-axis never resizes (pad shorter sequences with dim cells)
     let n_key = app.config.block_size;
     let n_query = app.config.block_size;
 
     // Build table: header row = key positions, then each query row
     let mut rows: Vec<Row> = Vec::new();
 
-    // Constraints: fixed 16 columns + row label = stable 52 width
     let constraints: Vec<Constraint> = std::iter::once(Constraint::Length(4))
         .chain((0..n_key).map(|_| Constraint::Length(3)))
         .collect();
 
-    // Header: empty corner + key indices (0..block_size constant)
     let header_cells: Vec<Cell> = std::iter::once(Cell::from("").style(Style::default().fg(STONE)))
         .chain((0..n_key).map(|k| {
             Cell::from(format!("{k}")).style(Style::default().fg(STONE))
         }))
         .collect();
     let header = Row::new(header_cells).height(1);
-    // Build rows for fixed n_query x n_key grid, padding beyond actual data
     for qi in 0..n_query {
         let row_weights = head.get(qi);
         let mut cells: Vec<Cell> = Vec::with_capacity(n_key + 1);

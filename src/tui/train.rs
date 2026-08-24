@@ -53,7 +53,6 @@ impl Dataset {
     }
 }
 
-/// One training step, returns (loss, lr, grad_norm, attn_snapshot)
 pub fn train_step(
     app: &App,
     step: usize,
@@ -84,7 +83,7 @@ pub fn train_step(
 
     for pos_id in 0..n {
         let (token_id, target_id) = (tokens[pos_id], tokens[pos_id + 1]);
-        // capture attn for TUI (allocate snapshot lazily inside gpt_with_attn)
+        // capture attn for TUI
         let logits = gpt_with_attn(
             token_id,
             pos_id,

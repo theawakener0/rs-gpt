@@ -7,7 +7,7 @@ description = "A Rust implementation of Andrej Karpathy's microgpt"
 license = "MIT"
 repository = "https://github.com/theawakener0/rs-gpt"
 readme = "README.md"
-keywords = ["gpt", "llm", "neural-network", "autograd", "ratatui", "tui"]
+keywords = ["gpt", "llm", "autograd", "tui"]
 categories = ["science", "command-line-utilities"]
 include = ["src/**/*", "dataset/input.txt", "Cargo.toml", "README.md", "LICENSE"]
 

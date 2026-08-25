@@ -30,6 +30,7 @@ cargo install --path .
 
 > [!NOTE]
 > Prebuilt binaries for Linux, macOS, and Windows are attached to every [GitHub release](https://github.com/theawakener0/rs-gpt/releases).
+> If you had trouble in windows, please try to use it in WSL or VM.
 
 ## Usage
 

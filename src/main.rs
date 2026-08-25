@@ -20,5 +20,9 @@ struct Args {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
-    if args.tui { tui::run(DATASET) } else { classic::run(DATASET) }
+    if args.tui {
+        tui::run(DATASET)
+    } else {
+        classic::run(DATASET)
+    }
 }

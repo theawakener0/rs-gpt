@@ -19,8 +19,8 @@ use std::error::Error;
 use std::io;
 use std::time::{Duration, Instant};
 
-pub fn run() -> Result<(), Box<dyn Error>> {
-    let dataset = Dataset::load("dataset/input.txt");
+pub fn run(data: &str) -> Result<(), Box<dyn Error>> {
+    let dataset = Dataset::new(data);
     let n_layer = 1;
     let n_embd = 16;
     let block_size = 16;

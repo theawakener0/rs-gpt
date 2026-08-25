@@ -4,17 +4,10 @@ use rand::rng;
 use rand::seq::{IndexedRandom, SliceRandom};
 use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
-use std::fs;
 
-pub fn run() -> Result<(), Box<dyn Error>> {
+pub fn run(data: &str) -> Result<(), Box<dyn Error>> {
     // set up dataset
-    let mut dataset: Vec<&str> = Vec::new();
-
-    let file_contents = fs::read_to_string("dataset/input.txt").expect("Couldn't read the file");
-
-    for line in file_contents.lines() {
-        dataset.push(line);
-    }
+    let mut dataset: Vec<&str> = data.lines().filter(|l| !l.is_empty()).collect();
 
     let mut rng = rng();
     dataset.shuffle(&mut rng);

@@ -33,9 +33,12 @@ pub struct Dataset {
 }
 
 impl Dataset {
-    pub fn load(path: &str) -> Self {
-        let file_contents = std::fs::read_to_string(path).expect("Couldn't read dataset");
-        let mut names: Vec<String> = file_contents.lines().map(|s| s.to_string()).collect();
+    pub fn new(contents: &str) -> Self {
+        let mut names: Vec<String> = contents
+            .lines()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
         use rand::seq::SliceRandom;
         let mut rng = rand::rng();
         names.shuffle(&mut rng);

@@ -7,6 +7,13 @@
 
 A Rust implementation of Andrej Karpathy's [microgpt](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95).
 
+## Demo
+
+![cli-demo](media/rs-gpt-cli.gif)
+
+![tui-demo](media/rs-gpt-tui.gif)
+
+
 ## Installation
 
 Prerequisites: Rust 1.85 or later.
